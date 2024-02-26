@@ -5,16 +5,16 @@ import logging
 logger = logging.getLogger(__name__)
 
 # Parameters
-Lx, Lz = 4, 6 
-Nx = Lx*512	
-Nz = Lz*512
+Lx, Lz = 1, 2
+Nx = Lx*64	
+Nz = Lz*64
 
 Re = 1e4
 Sc = 1	
 Pr = 1
 
 dealias = 3/2
-stop_sim_time = 10
+stop_sim_time = 20
 timestepper = d3.RK443
 max_timestep = 1e-2
 dtype = np.float64
@@ -22,7 +22,7 @@ dtype = np.float64
 # Bases
 coords = d3.CartesianCoordinates('x', 'z')
 dist = d3.Distributor(coords, dtype=dtype)
-xbasis = d3.RealFourier(coords['x'], size=Nx, bounds=(0, Lx), dealias=dealias)
+xbasis = d3.RealFourier(coords['x'], size=Nx, bounds=(-Lz/2, Lx/2), dealias=dealias)
 zbasis = d3.RealFourier(coords['z'], size=Nz, bounds=(-Lz/2, Lz/2), dealias=dealias)
 
 # Fields
@@ -30,7 +30,6 @@ p = dist.Field(name='p', bases=(xbasis,zbasis))
 rho = dist.Field(name='rho', bases=(xbasis,zbasis))
 u = dist.VectorField(coords, name='u', bases=(xbasis,zbasis))
 b = dist.VectorField(coords, name='b', bases=(xbasis,zbasis))
-ave = dist.VectorField(coords, name='ave', bases=(xbasis,zbasis))
 tau_u = dist.Field(name='tau_u')
 
 # Substitutions
@@ -42,26 +41,19 @@ ex, ez = coords.unit_vector_fields(dist)
 dx = lambda A: d3.Differentiate(A, coords['x'])
 dz = lambda A: d3.Differentiate(A, coords['z'])
 
-gr = dist.VectorField(coords, name='gr', bases = (xbasis,zbasis))
-gr['g'][1] = 1.0
+#rho_h = dist.Field()
+#rho_h['g'] = 3.0
 
-rhoinit = dist.Field(bases = (xbasis,zbasis))
-rhoinit['g'] = 1 - 2/2 * (np.tanh((z-((9*Lz)/20))/0.05) + 1) + 2/2 * (np.tanh(z/0.05) + 1)
-
-rho_h = dist.Field()
-rho_h['g'] = 3.0
-
-rho_l = dist.Field()
-rho_l['g'] = 1.0
+#rho_l = dist.Field()
+#rho_l['g'] = 1.0
 
 a = dist.Field(bases = (xbasis,zbasis))
 
 # Problem
 
-problem = d3.IVP([rho, u, ave, tau_u, p, b], namespace=locals())
+problem = d3.IVP([rho, u, tau_u, p, b], namespace=locals())
 problem.add_equation("dt(rho) - D*lap(rho) = - u@grad(rho)")
-problem.add_equation("dt(u) + grad(p) - nu*lap(u) = (b@grad(b))/rho - u@grad(u)- ((rho - rhoinit)/rho)*gr - (p/rho)*grad(rho) - (integ(integ((ave@ez), 'z'), 'x')/(Lx*Lz))*gr")
-problem.add_equation("ave = - u@grad(u)- ((rho - rhoinit)/rho)*gr - (p/rho)*grad(rho) + (b@grad(b))/rho")
+problem.add_equation("dt(u) + grad(p) - nu*lap(u) = (b@grad(b))/rho - u@grad(u) - (p/rho)*grad(rho)")
 problem.add_equation("div(u) + tau_u = 0")
 problem.add_equation("dt(b) - eta*lap(b) - 100*grad(div(b)) = b@grad(u) - u@grad(b)")
 problem.add_equation("integ(p) = 0")
@@ -72,8 +64,9 @@ solver.stop_sim_time = stop_sim_time
 
 # Initial conditions
 # Background shear
-rho['g'] = 1 - 2/2 * (np.tanh((z-((9*Lz)/20))/0.05) + 1) + 2/2 * (np.tanh(z/0.05) + 1)
-u['g'][0] = 0
+#rho['g'] = 1 #- 2/2 * (np.tanh((z-((9*Lz)/20))/0.05) + 1) + 2/2 * (np.tanh(z/0.05) + 1)
+rho['g']=2 + 1/2 * (np.tanh((z-0.5)/0.1) - np.tanh((z+0.5)/0.1))
+u['g'][0] = 1/2 + 1/2 * (np.tanh((z-0.5)/0.1) - np.tanh((z+0.5)/0.1))
 b['g'][0] = 0.03535
 
 a['g'] = 0
@@ -87,7 +80,7 @@ for i in range(1,257):
 u['g'][1] += a['g']*np.exp(-(z)**2/0.01) 
 
 # Analysis
-snapshots = solver.evaluator.add_file_handler('Bx_5', sim_dt=0.1, max_writes=1000)
+snapshots = solver.evaluator.add_file_handler('shearTest', sim_dt=1.0, max_writes=1000)
 snapshots.add_task(rho, name='density')
 snapshots.add_task(d3.grad(rho), name='grad_density')
 snapshots.add_task(p, name='pressure')
@@ -101,7 +94,7 @@ snapshots.add_task(-d3.div(d3.skew(b)), name='j')
 snapshots.add_task(dx(-d3.div(d3.skew(b))), name='dx_j')
 snapshots.add_task(dz(-d3.div(d3.skew(b))), name='dz_j')
 snapshots.add_task(-d3.div(d3.skew(u)), name='vorticity')
-snapshots.add_task(4 * ((rho - rho_l)*(rho_h - rho))/((rho_h - rho_l)**2), name='theta') #Stone&Gardiner2007b,AstrophysicalJournal
+#snapshots.add_task(4 * ((rho - rho_l)*(rho_h - rho))/((rho_h - rho_l)**2), name='theta') #Stone&Gardiner2007b,AstrophysicalJournal
 
 # CFL
 CFL = d3.CFL(solver, initial_dt=max_timestep, cadence=10, safety=0.2, threshold=0.1,
