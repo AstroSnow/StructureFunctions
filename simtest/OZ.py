@@ -30,12 +30,13 @@ rho = dist.Field(name='rho', bases=(xbasis,ybasis))
 u = dist.VectorField(coords, name='u', bases=(xbasis,ybasis))
 b = dist.VectorField(coords, name='b', bases=(xbasis,ybasis))
 tau_u = dist.Field(name='tau_u')
-tau_b = dist.Field(name='tau_b')
+#tau_b = dist.Field(name='tau_b')
 
 # Substitutions
 nu = 0.01
 D = 1 / (Re*Sc)
 eta = 0.01 # 1 / (Re*Pr)
+rho_ref=0.01
 x, y = dist.local_grids(xbasis, ybasis)
 ex,ey = coords.unit_vector_fields(dist)
 dx = lambda A: d3.Differentiate(A, coords['x'])
@@ -53,9 +54,9 @@ a2 = dist.Field(bases = (xbasis,ybasis))
 # Problem
 
 problem = d3.IVP([u, tau_u, p, b], namespace=locals())
-problem.add_equation("dt(u) + grad(p) - 0.01*lap(u)= (b@grad(b)) - u@grad(u)")
+problem.add_equation("dt(u) + grad(p)/rho_ref - 0.001*lap(u)= (b@grad(b))/rho_ref - u@grad(u)")
 problem.add_equation("div(u) + tau_u = 0")
-problem.add_equation("dt(b) - 0.01*lap(b)  = b@grad(u) - u@grad(b)")
+problem.add_equation("dt(b) - 0.001*lap(b) - 100*grad(div(b)) = b@grad(u) - u@grad(b)")
 #problem.add_equation("div(b) + tau_b = 0")
 problem.add_equation("integ(p) = 0")
 
@@ -66,7 +67,7 @@ solver.stop_sim_time = stop_sim_time
 # Initial conditions
 # Background shear
 #rho['g'] = 1 #- 2/2 * (np.tanh((z-((9*Lz)/20))/0.05) + 1) + 2/2 * (np.tanh(z/0.05) + 1)
-rho['g']=1 # + 1/2 * (np.tanh((z-0.5)/0.1) - np.tanh((z+0.5)/0.1))
+#rho['g']=0.1 # + 1/2 * (np.tanh((z-0.5)/0.1) - np.tanh((z+0.5)/0.1))
 u['g'][0] = -np.sin(2.0*np.pi*y)
 u['g'][1] = np.sin(2.0*np.pi*x)
 #u['g'][2] = 0.0
@@ -79,21 +80,21 @@ a['g'] = 0
 a2['g'] = 0
 for i in range(1,257):
 	k = np.float128(i)
-	amp = round(random.uniform(-0.0125, 0.0125), 5)
+	amp = round(random.uniform(-1.0, 1.0), 5)
 	phase = random.uniform(0, np.pi)
 	a['g'] = a['g'] + amp*np.sin((k*x) + phase)
-	amp = round(random.uniform(-0.0125, 0.0125), 5)
+	amp = round(random.uniform(-1, 1), 5)
 	phase = random.uniform(0, np.pi)
 	a2['g'] = a2['g'] + amp*np.sin((k*x) + phase)
 	
 # Add small vertical velocity perturbations localized to the shear layers
-u['g'][0] += a['g']
-u['g'][1] += a2['g']
+u['g'][0] += a['g']*0.1
+u['g'][1] += a2['g']*0.1
 #u['g'][2] += 1.0
 
 
 # Analysis
-snapshots = solver.evaluator.add_file_handler('DataOZ', sim_dt=0.1, max_writes=1000)
+snapshots = solver.evaluator.add_file_handler('DataOZ', sim_dt=0.01, max_writes=1000)
 #snapshots.add_task(rho, name='density')
 #snapshots.add_task(d3.grad(rho), name='grad_density')
 snapshots.add_task(p, name='pressure')
