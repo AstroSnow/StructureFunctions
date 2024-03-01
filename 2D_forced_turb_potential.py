@@ -40,8 +40,8 @@ w = -d3.lap(psi)
 j = -d3.div(d3.skew(B)) # check if this is correct
 problem = d3.IVP([A,psi,c], namespace=locals())
 problem.add_equation("dt(w) - nu*lap(w) + c = - u@grad(w) + dot(B,grad(j))")
-problem.add_equation("dt(A) - eta*lap(A)  = -dot(u,grad(A))")# u*grad(A) ")
-problem.add_equation("integ(psi) = 0") # Pressure gauge
+problem.add_equation("dt(A) - eta*lap(A)  = -dot(u,grad(A))")
+problem.add_equation("integ(psi) = 0") # Gauge for psi
 
 
 
